@@ -35,7 +35,26 @@ These checks operate on exported JSON and local functions. They cannot prove n8n
 
 The user reported that the original 1.87 MB export imports into n8n but test-webhook registration fails with a workflow-size error. Empty pinData was not the cause; every Code node duplicated the full runtime. This refactor links only the required helpers, replaces simple assignments with native nodes, and removes redundant pass-through nodes. All retry/revision limits and the explicit approval gate remain.
 
-No browser/n8n automation or authenticated provider request was attempted during this local-only refactor. Successful webhook registration and live execution of the compact export are still manual acceptance checks; the offline results do not claim a Cloud retest.
+No browser/n8n automation or authenticated provider request was attempted during this local-only refactor. At the end of that refactor, Cloud acceptance was still pending; the later user-reported execution is recorded below.
+
+## Live debugging follow-up (2026-09-24)
+
+**Status: live acceptance failed; root cause pending execution diagnostics.** The user reports that the compact workflow now imports and executes through Human Approval, but the draft contains zero evidence-backed competitors, unavailable/invalid Orchestrator, Discovery, and Synthesis responses after repair, and no usable sources. This is evidence that the compact export runs, not a successful research test. The agent has not approved the failed draft.
+
+Browser automation could not initialize its runtime during this follow-up, before connecting to n8n. It was not repeatedly retried. The execution itself, saved credential bindings, provider authorization/quota, actual selected model, and final output could not be inspected. The repository still configures `models/gemini-2.5-flash`; this is not a claim that the live workspace successfully used that model. No successful live-test date is recorded.
+
+The same local checks were repeated successfully on 2026-09-24: build, workflow validation, 41 tests, and 127 released-node parameter checks. The export remains 227,372 bytes with 127 nodes. Local fixtures use mocked provider responses and do not reproduce the account's failing request.
+
+Repository-side diagnosis:
+
+- Orchestrator precedes the first You.com request and the competitor loop. Its first failure cannot originate in MCP evidence normalization, the research merge, or competitor loop state.
+- The pinned n8n Chain implementation emits plain model completions as `{text: string}`, and successful structured-parser results as objects. The runtime accepts both, as well as `{output: object}`. The chain inserts the prompt as a variable, so JSON braces within the prompt are not interpreted as template placeholders. See the published [response formatter](https://unpkg.com/@n8n/n8n-nodes-langchain@2.40.3/dist/nodes/chains/ChainLLM/methods/responseFormatter.js) and [prompt handling](https://unpkg.com/@n8n/n8n-nodes-langchain@2.40.3/dist/nodes/chains/ChainLLM/methods/promptUtils.js).
+- Zero final report sources does not establish that You.com returned zero search results: failed Gemini discovery prevents competitor research even if discovery evidence exists. Inspect `N04 Preserve Discovery Evidence.discovery_evidence` and the search error records separately.
+- These source checks do not identify the actual live error. No credential, model, parser, or evidence-rule change has been made on the strength of the generic fallback message.
+
+To resume, inspect the failed execution's `Agent: Orchestrator` and `Gemini: Orchestrator` error first. `Parse: Orchestrator` retains `llm.error` and `llm.raw_model_response`; `Capture repair: Orchestrator` retains the second response; `State: Orchestrator` retains these in `errors[]`. The same records survive into `N18 Prepare Approval`. Share only non-secret error text if browser access remains unavailable, not credential settings, headers, tokens, or keys.
+
+Once that error is resolved, run the isolated Gemini JSON prompt and You.com search specified by the user with saved credentials, then repeat the full Perplexity AI case. Compare the actual MCP response with `normalizeSearch()` before changing the adapter. Stop at a meaningful, sourced draft for the user's approval. Final Markdown verification and a successful-live-test record remain pending.
 
 ## Manual setup
 
@@ -169,6 +188,8 @@ The repository's illustrative report is **not** a test result. Credentialed You.
 
 | Date / execution ID | Case | Environment / versions | Observed result | Pass/fail / follow-up |
 | --- | --- | --- | --- | --- |
-| Not executed | Credentialed manual cases above | User's n8n Cloud workspace | Credentials unavailable in development environment | Pending user execution |
+| Reported 2026-09-24; execution ID unavailable | Compact Perplexity AI run | User's n8n Cloud workspace; versions/model unverified | User reports Human Approval with zero competitors and failed model stages | Failed acceptance; exact initial model error pending |
+| 2026-09-24 | Agent live-debugging attempt | Browser automation runtime | Runtime failed before connecting; no live node inspection or provider tests | Blocked; not retried |
+| Pending | Successful research, user approval, final Markdown | User's n8n Cloud workspace | No successful run verified | Pending |
 
 Use offline command output or CI logs as evidence for local checks; do not turn an expected behavior or an illustrative example into a claimed successful run.

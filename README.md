@@ -38,7 +38,7 @@ See [the exact node map](docs/node-map.md) for node names, inputs, outputs, cred
 
 ## Export size and build strategy
 
-The generated workflow is **227,372 bytes** (about 227 KB), reduced from 1,870,027 bytes. The original export imported successfully according to the user, but n8n refused test-webhook registration with a workflow-size error even though pinned data was empty. The compact export has not been retested in n8n Cloud during this local-only change.
+The generated workflow is **227,372 bytes** (about 227 KB), reduced from 1,870,027 bytes. The original export imported successfully according to the user, but n8n refused test-webhook registration with a workflow-size error even though pinned data was empty. The user subsequently reported that the compact export imports and reaches Human Approval, but its first live run returned zero competitors after model failures. Live research acceptance is still failing; see the [debugging status](docs/testing.md#live-debugging-follow-up-2026-09-24).
 
 Each Code node includes only its required helpers and their explicit dependencies. Agent preparation/finalization helpers are split by role; a search node does not carry report-rendering or unrelated agent logic. Seven simple query assignments use native Edit Fields nodes, and eleven copy-only nodes were removed. The export keeps readable JavaScript, all research/error/approval behavior, and all twelve You.com/seven Gemini credential bindings. It omits pinData entirely. Build, validation, and regression tests enforce a **500,000-byte ceiling**.
 
