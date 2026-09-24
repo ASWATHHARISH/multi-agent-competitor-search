@@ -16,15 +16,26 @@ Inspect the output and exit status of each command. Validation should cover JSON
 
 These checks operate on exported JSON and local functions. They cannot prove n8n's runtime node compatibility, paired-item behavior, a provider's response shape, or browser form behavior. Complete the manual cases below before using the production form.
 
-## Completed offline validation (2026-09-24)
+## Completed local validation after size refactor (2026-09-24)
 
-- npm run build: passed; generated the actual 138-node export.
-- npm run validate: passed; 144 main connections, 21 model/parser connections, 47 expressions, 72 Code-node bodies, and 28 named-node references checked. No missing required node, unknown cycle, credential payload, or approval bypass was found.
-- npm test: passed, 36 tests. This includes five simulations that execute the exported Code nodes and expressions with mocked providers/native scheduling: local competitor failure plus pricing recovery and revision/approval, empty discovery, revision exhaustion, approval timeout, and invalid input.
-- node scripts/check-node-contracts.js: passed all 138 native n8n parameter checks against pinned released descriptors. See [node-contracts.md](node-contracts.md) for optional reproduction dependencies and scope.
+| Metric | Original export | Compact export |
+| --- | ---: | ---: |
+| UTF-8 file size | 1,870,027 bytes | 227,372 bytes |
+| Total nodes | 138 | 127 |
+| Code nodes | 72 | 54 |
+| Native Edit Fields nodes | 0 | 7 |
+| pinData | Empty object | Omitted |
+
+- npm run build: passed; readable, self-contained helper bundles; output below the enforced 500,000-byte ceiling.
+- npm run validate: passed; 133 main connections, 21 model/parser connections, 54 expressions, 54 Code-node bodies, and 28 named-node references checked. No orphaned required nodes, unknown cycles, credential payloads, or approval bypasses.
+- npm test: passed, 41 tests. Six exported-graph scenarios include three separately researched competitors, local failure, pricing recovery, malformed JSON repair, empty discovery, revision exhaustion, approval timeout, and invalid input. Size regressions check omitted pinData, selective helpers, and native state-preserving query assignments.
+- node scripts/check-node-contracts.js: all 127 native n8n parameter checks passed, including Edit Fields version 3.4. See [node-contracts.md](node-contracts.md) for reproduction details.
+- Additional differential check: all 260 helper invocations across the 31 runtime fixtures matched the original committed implementation in returned values and thrown errors.
 - git diff --check: passed.
 
-These are actual local results. No authenticated You.com/Gemini request, live Cloud import, or browser form execution was performed. Those manual acceptance cases remain pending below.
+The user reported that the original 1.87 MB export imports into n8n but test-webhook registration fails with a workflow-size error. Empty pinData was not the cause; every Code node duplicated the full runtime. This refactor links only the required helpers, replaces simple assignments with native nodes, and removes redundant pass-through nodes. All retry/revision limits and the explicit approval gate remain.
+
+No browser/n8n automation or authenticated provider request was attempted during this local-only refactor. Successful webhook registration and live execution of the compact export are still manual acceptance checks; the offline results do not claim a Cloud retest.
 
 ## Manual setup
 

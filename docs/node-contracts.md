@@ -3,7 +3,7 @@
 Checked on **2026-09-24** against the published packages **`n8n-nodes-base@2.15.1`** and **`@n8n/n8n-nodes-langchain@2.40.3`**. The links below pin the package versions inspected; they do not track a changing development branch. The workflow deliberately selects supported node versions, which need not be each package's newest default.
 
 The same definitions are available as released JSON catalogs: [core node descriptions](https://unpkg.com/n8n-nodes-base@2.15.1/dist/types/nodes.json) and [AI node descriptions](https://unpkg.com/@n8n/n8n-nodes-langchain@2.40.3/dist/types/nodes.json). Both catalogs were inspected to cross-check names, supported versions, and property names without installing or starting a full n8n server.
-This is source-level compatibility evidence. It does not claim that this workflow was imported into the user's n8n Cloud instance, that its saved credentials were accessible, or that authenticated You.com/Gemini requests succeeded. Follow [testing.md](testing.md) for the Cloud acceptance checks.
+This is source-level compatibility evidence. The user reported that the original export imported into n8n Cloud but test-webhook registration failed because the workflow was too large despite empty pinned data. The smaller export has not been imported or executed here, and these checks do not establish saved-credential access or authenticated You.com/Gemini success. Follow [testing.md](testing.md) for the Cloud acceptance checks.
 
 ## Node types and versions
 
@@ -20,6 +20,7 @@ This is source-level compatibility evidence. It does not claim that this workflo
 | `n8n-nodes-base.splitOut` | `1` | [Split Out](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Transform/SplitOut/SplitOut.node.js). `fieldToSplitOut`, `include`, `options.destinationFieldName`. |
 | `n8n-nodes-base.aggregate` | `1` | [Aggregate](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Transform/Aggregate/Aggregate.node.js). `aggregate: "aggregateAllItemData"`, `destinationFieldName`, `include: "allFields"` combine items into one array. |
 | `n8n-nodes-base.code` | `2` | [Code](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Code/Code.node.js). JavaScript `jsCode`; `mode: "runOnceForAllItems"` or `"runOnceForEachItem"`. |
+| `n8n-nodes-base.set` | `3.4` | Native [Edit Fields](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Set/v2/SetV2.node.js). `mode: "manual"`, `assignments.assignments`, and `includeOtherFields: true` add the normalized query while preserving the execution state. |
 | `n8n-nodes-base.if` | `2.2` | [If V2](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/If/V2/IfV2.node.js). `conditions` filter object, filter options version **2**; output **0 = true**, output **1 = false**. |
 
 ## You.com OAuth integration
@@ -71,11 +72,15 @@ A final Form uses `operation: "completion"`. `respondWith: "showText"` reads `re
 
 Merge append mode uses numeric `numberInputs`, including **4** for the four research streams ([released helper](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Merge/v3/helpers/descriptions.js), [append operation](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Merge/v3/actions/mode/append.js)). Each branch should produce a result-or-error item, allowing evidence assembly to account for all four purposes.
 
+The first-attempt result and terminal transport-retry result are mutually exclusive. Both connect directly to the same research-purpose input on the four-input Merge. The [published `n8n-core@2.16.0` execution engine](https://unpkg.com/n8n-core@2.16.0/dist/execution-engine/workflow-execute.js) fills waiting data by input index, not by every incoming connection. With the exported `executionOrder: "v1"`, an empty IF output does not schedule its downstream node. Each selected endpoint emits one state item, so these connections preserve the four-purpose join without redundant pass-through Code nodes. This is a source inspection, not a full n8n engine execution test.
+
+Query preparation uses Edit Fields 3.4 rather than a Code node. Each `assignments.assignments` entry has `id`, `name: "active_query"`, `type: "string"`, and an expression `value`. `includeOtherFields: true` selects the default `include: "all"`; the [released Set helpers](https://unpkg.com/n8n-nodes-base@2.15.1/dist/nodes/Set/v2/helpers/utils.js) deep-copy the input JSON, overlay the query, and create `pairedItem: { item: itemIndex }`. All research state therefore survives these scalar assignments, including evidence and retry counters.
+
 Loop Over Items `options.reset` must remain false for the competitor loop. Returning the processed competitor item to the loop advances its saved batch and eventually emits all processed records on `done`. The evidence retry uses a separate bounded counter; it must not reset the competitor loop.
 
 ## What standalone validation can establish
 
-`scripts/check-node-contracts.js` checked **all 138 generated nodes** against those released catalogs. It used the official **`n8n-workflow@2.16.0`** `NodeHelpers.getNodeParameters` and `NodeHelpers.getNodeParametersIssues` helpers, after validating each exact type/version. All 138 native parameter checks passed. Additional checks found no unknown parameter names, missing Form 2.4 field names, missing Form Trigger ancestors, or Forms reachable after a completion Form. The approval JSON expression was evaluated with a synthetic draft to inspect its resulting field definitions. This was an offline parameter/graph check, not a browser form submission.
+`scripts/check-node-contracts.js` checked **all 127 generated nodes** against those released catalogs. It used the official **`n8n-workflow@2.16.0`** `NodeHelpers.getNodeParameters` and `NodeHelpers.getNodeParametersIssues` helpers, after validating each exact type/version. All 127 native parameter checks passed, including all seven Edit Fields nodes. Additional checks found no unknown parameter names, missing Form 2.4 field names, missing Form Trigger ancestors, or Forms reachable after a completion Form. The approval JSON expression was evaluated with a synthetic draft to inspect its resulting field definitions. This was an offline parameter/graph check, not a browser form submission.
 
 The two intentionally unbound credential types were `googlePalmApi` and `mcpOAuth2Api`. Credentials were not injected, inspected, or tested.
 

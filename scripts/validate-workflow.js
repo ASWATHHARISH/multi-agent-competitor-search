@@ -2,10 +2,11 @@
  const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
  const root=path.resolve(__dirname,'..');
  function validate(w){
- const errors=[],check=(ok,msg)=>{if(!ok)errors.push(msg);},names=new Map(w.nodes.map(n=>[n.name,n])),ids=new Set(w.nodes.map(n=>n.id));
+ const errors=[],check=(ok,msg)=>{if(!ok)errors.push(msg);},exportedBytes=Buffer.byteLength(JSON.stringify(w,null,2)+'\n','utf8'),names=new Map(w.nodes.map(n=>[n.name,n])),ids=new Set(w.nodes.map(n=>n.id));
  check(names.size===w.nodes.length,'Duplicate names');check(ids.size===w.nodes.length,'Duplicate IDs');
+ check(exportedBytes<500000,'Workflow must remain below 500,000 bytes');check(!Object.hasOwn(w,'pinData'),'Omit pinData from the portable export');
  check(w.active===false,'Must import inactive');check(w.settings.executionOrder==='v1','v1 execution order required');
- const types={'n8n-nodes-base.formTrigger':2.4,'n8n-nodes-base.code':2,'n8n-nodes-base.if':2.2,'n8n-nodes-base.form':2.4,'n8n-nodes-base.splitOut':1,'n8n-nodes-base.splitInBatches':3,'n8n-nodes-base.merge':3.2,'n8n-nodes-base.aggregate':1,'@n8n/n8n-nodes-langchain.chainLlm':1.7,'@n8n/n8n-nodes-langchain.lmChatGoogleGemini':1,'@n8n/n8n-nodes-langchain.outputParserStructured':1.3,'@n8n/n8n-nodes-langchain.mcpClient':1.1};
+ const types={'n8n-nodes-base.formTrigger':2.4,'n8n-nodes-base.code':2,'n8n-nodes-base.set':3.4,'n8n-nodes-base.if':2.2,'n8n-nodes-base.form':2.4,'n8n-nodes-base.splitOut':1,'n8n-nodes-base.splitInBatches':3,'n8n-nodes-base.merge':3.2,'n8n-nodes-base.aggregate':1,'@n8n/n8n-nodes-langchain.chainLlm':1.7,'@n8n/n8n-nodes-langchain.lmChatGoogleGemini':1,'@n8n/n8n-nodes-langchain.outputParserStructured':1.3,'@n8n/n8n-nodes-langchain.mcpClient':1.1};
  const main=[],ai=[];
  for(const [from,kinds] of Object.entries(w.connections)){
  check(names.has(from),'Unknown source '+from);
@@ -35,6 +36,7 @@
  for(const n of w.nodes){
  check(types[n.type]===n.typeVersion,'Unknown node type/version '+n.name);inspect(n.parameters,n.name);
  if(n.type==='n8n-nodes-base.code'){codeNodes++;try{new vm.Script('(function(){'+n.parameters.jsCode+'\n})');}catch(e){errors.push(n.name+': code syntax '+e.message);}}
+ if(n.type==='n8n-nodes-base.set'){check(n.parameters.mode==='manual'&&n.parameters.includeOtherFields===true,n.name+': query assignment must preserve state');}
  if(n.type.endsWith('.chainLlm')){
  check(n.onError==='continueRegularOutput',n.name+': local error handling missing');
  check(n.parameters.batching.batchSize===1,n.name+': batch must be one');
@@ -59,7 +61,7 @@
  check(linked('N06 Loop Competitors','N16 Aggregate Competitors',0),'Loop done output must aggregate');
  check(linked('N06 Loop Competitors','N06 Initialize Competitor',1),'Loop output must research');
  check(names.get('N06 Loop Competitors')?.parameters.batchSize===1&&names.get('N06 Loop Competitors')?.parameters.options.reset===false,'Loop state must be serial without reset');
- check(main.filter(e=>e.to==='N09 Merge Four Search Branches').map(e=>e.input).sort().join(',')==='0,1,2,3','Merge needs all four search inputs');
+ check([...new Set(main.filter(e=>e.to==='N09 Merge Four Search Branches').map(e=>e.input))].sort().join(',')==='0,1,2,3','Merge needs all four search inputs');
  check(linked('N19 Explicitly Approved?','N21 Approved Markdown Output')&&main.filter(e=>e.to==='N21 Approved Markdown Output').length===1,'Approval bypass');
  check(linked('N19 Revision Budget Available?','Unapproved Outcome',1),'Exhausted revision terminal missing');
  check(names.get('N12 Evidence Retry Needed?')?.parameters.conditions.conditions[0].leftValue.includes('$json.retry_count < $json.max_retry'),'Evidence budget guard missing');
@@ -68,7 +70,7 @@
  if(n.parameters.operation==='completion')check(!main.some(e=>e.from===n.name),n.name+': final form must terminate');
  }
  const map=fs.readFileSync(path.join(root,'docs/node-map.md'),'utf8');for(const n of w.nodes)check(map.includes('| '+n.name+' |'),'Node map missing '+n.name);
- return {errors,counts:{nodes:w.nodes.length,mainConnections:main.length,aiConnections:ai.length,expressions,codeNodes,nodeReferences}};
+ return {errors,counts:{exportedBytes,nodes:w.nodes.length,mainConnections:main.length,aiConnections:ai.length,expressions,codeNodes,nodeReferences}};
  }
  if(require.main===module){const result=validate(JSON.parse(fs.readFileSync(path.join(root,'workflow/competitor-research-agent.json'),'utf8')));console.log(JSON.stringify(result,null,2));process.exitCode=result.errors.length?1:0;}
  module.exports={validate};

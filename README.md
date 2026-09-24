@@ -36,6 +36,12 @@ See [the exact node map](docs/node-map.md) for node names, inputs, outputs, cred
 
 **You.com configuration:** the `You.com:` nodes use the official `https://api.you.com/mcp` endpoint with HTTP Streamable transport, MCP OAuth2 authentication (`mcpOAuth2Api`), and the `you-search` tool (“Search the web and news”). Tool input is JSON with `query` and `count: 6`. The workflow uses the existing You.com integration through n8n's native MCP Client; it does not introduce a replacement service or store credentials in source files.
 
+## Export size and build strategy
+
+The generated workflow is **227,372 bytes** (about 227 KB), reduced from 1,870,027 bytes. The original export imported successfully according to the user, but n8n refused test-webhook registration with a workflow-size error even though pinned data was empty. The compact export has not been retested in n8n Cloud during this local-only change.
+
+Each Code node includes only its required helpers and their explicit dependencies. Agent preparation/finalization helpers are split by role; a search node does not carry report-rendering or unrelated agent logic. Seven simple query assignments use native Edit Fields nodes, and eleven copy-only nodes were removed. The export keeps readable JavaScript, all research/error/approval behavior, and all twelve You.com/seven Gemini credential bindings. It omits pinData entirely. Build, validation, and regression tests enforce a **500,000-byte ceiling**.
+
 ## Import and configure
 
 1. Download [workflow/competitor-research-agent.json](workflow/competitor-research-agent.json).
@@ -93,7 +99,7 @@ npm run validate
 npm test
 ```
 
-The implementation passed 36 offline tests and all 138 native node-parameter checks; the recorded results are in [docs/testing.md](docs/testing.md). These commands regenerate and inspect the workflow and exercise the offline control/evidence logic. They do not call You.com or Gemini, import into your workspace, or execute an n8n form. The [test guide](docs/testing.md) separates offline checks from the required manual credentialed checks. No live research run or cloud import is claimed by the illustrative sample.
+The compact implementation passed 41 offline tests and all 127 native node-parameter checks; the recorded results are in [docs/testing.md](docs/testing.md). These commands regenerate and inspect the workflow and exercise the offline control/evidence logic. They do not call You.com or Gemini, import into your workspace, or execute an n8n form. The [test guide](docs/testing.md) separates offline checks from the required manual credentialed checks. No live research run or cloud import is claimed by the illustrative sample.
 
 ## Limitations
 
@@ -123,11 +129,13 @@ workflow/
   README.md                   Workflow artifact notes
 scripts/
   build-workflow.js            Reproducible export generation
+  bundle-runtime.js            Per-node helper dependency linker
   validate-workflow.js         Static workflow checks
   check-node-contracts.js      Optional released-node parameter checks
 tests/
   runtime.test.js              Offline behavior tests
   workflow-scenarios.test.js   Exported graph simulations with mocked services
+  workflow-size.test.js        Payload size and selective-bundling regressions
 package.json                  Local commands; no runtime dependencies
 ```
 

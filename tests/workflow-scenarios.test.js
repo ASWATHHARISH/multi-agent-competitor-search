@@ -14,6 +14,8 @@ const item = json => ({ json: copy(json) });
 const DISCOVERY = 'https://discovery.example.test/alternatives';
 const HEALTHY = 'Recoverable Rival';
 const BROKEN = 'Failed Rival';
+const INDEPENDENT = 'Independent Rival';
+const sourceBase = name => name === INDEPENDENT ? 'https://independent.example.test' : 'https://healthy.example.test';
 const NOW = '2026-09-24T09:00:00.000Z';
 const nodeByName = new Map(workflow.nodes.map(node => [node.name, node]));
 const scripts = new Map();
@@ -22,7 +24,7 @@ class FixedDate extends Date {
   static now() { return Date.parse(NOW); }
 }
 
-function simulate({ zero = false, decisions = [{ Decision: 'Approve' }], input = {} } = {}) {
+function simulate({ zero = false, competitors = [HEALTHY, BROKEN], decisions = [{ Decision: 'Approve' }], input = {} } = {}) {
   const history = new Map(), counts = new Map(), calls = [], pages = [], completions = [];
   const mergeBuffers = new Map(), loops = new Map();
   const queue = [{ name: 'N01 Research Request', items: [item({ target_company: 'Fixture Target', target_product: 'answer engine', ...input })], port: 0 }];
@@ -54,19 +56,19 @@ function simulate({ zero = false, decisions = [{ Decision: 'Approve' }], input =
     if (stage === 'planner' && state.competitor.name === HEALTHY && !isRepair) return { text: 'Synthetic malformed planner completion' };
     let value;
     if (stage === 'orchestrator') value = { target_company: state.target_company, discovery_query: 'Fixture Target direct alternatives', research_dimensions: ['pricing', 'core_features', 'target_users', 'positioning', 'differentiators', 'recent_news'] };
-    if (stage === 'discovery') value = { competitors: zero ? [] : [HEALTHY, BROKEN].map(name => ({ name, reason: 'Synthetic source describes direct competition.', evidence_urls: [DISCOVERY] })) };
+    if (stage === 'discovery') value = { competitors: zero ? [] : competitors.map(name => ({ name, reason: 'Synthetic source describes direct competition.', evidence_urls: [DISCOVERY] })) };
     if (stage === 'planner') value = { competitor_name: state.competitor.name, queries: Object.fromEntries(['official', 'pricing', 'positioning', 'news'].map(dimension => [dimension, state.competitor.name + ' ' + dimension])) };
     if (stage === 'extractor') {
       const pricing = state.evidence.find(e => e.url.endsWith('/pricing'));
-      const source = 'https://healthy.example.test/official';
+      const base = sourceBase(state.competitor.name), source = base + '/official';
       value = {
         competitor_name: state.competitor.name, official_site: source,
         pricing: pricing ? { summary: 'Fixture plan costs 12 units.', verified: true, source_urls: [pricing.url] } : { summary: 'Pricing not verified', verified: false, source_urls: [] },
         core_features: [{ claim: 'Fixture search feature.', source_urls: [source] }],
-        target_users: [{ claim: 'Fixture professional audience.', source_urls: ['https://healthy.example.test/positioning'] }],
-        positioning: { summary: 'Fixture research positioning.', source_urls: ['https://healthy.example.test/positioning'] },
+        target_users: [{ claim: 'Fixture professional audience.', source_urls: [base + '/positioning'] }],
+        positioning: { summary: 'Fixture research positioning.', source_urls: [base + '/positioning'] },
         differentiators: [{ claim: 'Fixture feature difference.', source_urls: [source] }],
-        recent_news: [{ summary: 'Fixture product release.', date: '2026-09-01', source_urls: ['https://healthy.example.test/news'] }],
+        recent_news: [{ summary: 'Fixture product release.', date: '2026-09-01', source_urls: [base + '/news'] }],
         missing_fields: pricing ? [] : ['pricing'], all_source_urls: state.evidence.map(e => e.url),
       };
     }
@@ -88,8 +90,8 @@ function simulate({ zero = false, decisions = [{ Decision: 'Approve' }], input =
     calls.push({ kind: 'search', node: node.name, competitor: state.competitor?.name, retry_count: state.retry_count, dimension, query: args.query, transport: node.name.endsWith(' - transport retry') });
     if (zero && isDiscovery) return { content: [{ type: 'text', text: JSON.stringify({ results: { web: [], news: [] } }) }] };
     if (state.competitor?.name === BROKEN) return { isError: true, content: [{ type: 'text', text: 'Synthetic local tool outage' }] };
-    if (dimension === 'pricing') return { content: [{ type: 'text', text: '{"results":{"web":[]}}' }] };
-    const url = isDiscovery ? DISCOVERY : 'https://healthy.example.test/' + (dimension === 'retry' ? 'pricing' : dimension);
+    if (dimension === 'pricing' && state.competitor.name !== INDEPENDENT) return { content: [{ type: 'text', text: '{"results":{"web":[]}}' }] };
+    const url = isDiscovery ? DISCOVERY : sourceBase(state.competitor.name) + '/' + (dimension === 'retry' ? 'pricing' : dimension);
     return { content: [{ type: 'text', text: JSON.stringify({ results: { web: [{ url, title: 'Synthetic fixture only', snippets: ['Supplied synthetic facts for ' + dimension], published_at: '2026-09-01' }] } }) }] };
   }
   while (queue.length) {
@@ -102,6 +104,19 @@ function simulate({ zero = false, decisions = [{ Decision: 'Approve' }], input =
     else if (node.type === 'n8n-nodes-base.code') {
       if (!scripts.has(node.name)) scripts.set(node.name, new vm.Script('(function(){\n' + node.parameters.jsCode + '\n})()', { filename: node.name }));
       outputs = [copy(scripts.get(node.name).runInNewContext(context(items, node.name), { timeout: 1000 }))];
+    } else if (node.type === 'n8n-nodes-base.set') {
+      assert.equal(node.typeVersion, 3.4);
+      assert.equal(node.parameters.includeOtherFields, true);
+      outputs = [items.map(source => {
+        const json = copy(source.json);
+        for (const assignment of node.parameters.assignments.assignments) {
+          assert.equal(assignment.type, 'string');
+          const value = evaluate(assignment.value, [source], node.name);
+          assert.equal(typeof value, 'string');
+          json[assignment.name] = value;
+        }
+        return item(json);
+      })];
     } else if (node.type === 'n8n-nodes-base.if') {
       const condition = node.parameters.conditions.conditions[0];
       assert.equal(condition.operator.type, 'boolean');
@@ -267,4 +282,42 @@ test('offline exported graph: invalid input goes directly to unapproved completi
   assert.equal(result.calls.length, 0);
   assert.equal(result.pages.length, 0);
   assert.equal(result.completion.node, 'Display Unapproved Outcome');
+});
+
+test('offline exported graph: three competitors retain separate evidence and retry budgets', () => {
+  const result = simulate({ competitors: [HEALTHY, BROKEN, INDEPENDENT] });
+  assert.equal(result.state.approval_status, 'approved');
+  assert.deepEqual(result.state.records.map(record => record.competitor.name), [HEALTHY, BROKEN, INDEPENDENT]);
+  assert.equal(result.counts.get('N06 Loop Competitors'), 4);
+  assert.equal(result.counts.get('N09 Merge Four Search Branches'), 3);
+  assert.equal(result.counts.get('N13 Increment Evidence Retry'), 2);
+  for (const record of result.state.records) {
+    assert.equal(record.profile.competitor_name, record.competitor.name);
+    assert.ok(record.retry_count <= 1);
+    const validators = result.calls.filter(call => call.kind === 'model' && call.stage === 'validator' && call.competitor === record.competitor.name);
+    assert.deepEqual(validators.map(call => call.retry_count), record.competitor.name === INDEPENDENT ? [0] : [0, 1]);
+    const searches = result.calls.filter(call => call.kind === 'search' && call.competitor === record.competitor.name);
+    for (const dimension of ['official', 'pricing', 'positioning', 'news']) {
+      assert.ok(searches.some(call => call.dimension === dimension), record.competitor.name + ' missing ' + dimension + ' research');
+    }
+    assert.ok(searches.every(call => call.query.includes(record.competitor.name)));
+    assert.ok(searches.every(call => call.retry_count <= 1));
+    if (record.competitor.name === BROKEN) {
+      assert.equal(record.validation.validation_status, 'partial');
+      assert.deepEqual(record.audit_evidence, []);
+      continue;
+    }
+    assert.equal(record.profile.pricing.verified, true);
+    assert.equal(record.validation.validation_status, 'pass');
+    assert.ok(record.audit_evidence.length >= 4);
+    assert.ok(record.audit_evidence.every(row => row.url.startsWith(sourceBase(record.competitor.name) + '/')));
+  }
+  const independent = result.state.records.find(record => record.competitor.name === INDEPENDENT);
+  assert.equal(independent.retry_count, 0, 'A previous competitor must not consume this competitor retry budget');
+  assert.equal(result.calls.filter(call => call.kind === 'search' && call.competitor === INDEPENDENT && call.dimension === 'retry').length, 0);
+  assert.equal(result.pages.length, 1);
+  assert.equal(result.state.report_markdown, result.pages[0].state.draft_markdown);
+  assert.match(result.state.report_markdown, /https:\/\/healthy\.example\.test\/pricing/);
+  assert.match(result.state.report_markdown, /https:\/\/independent\.example\.test\/pricing/);
+  assert.ok(result.steps < 450);
 });
