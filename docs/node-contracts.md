@@ -91,4 +91,3 @@ The check downloads the two pinned public catalogs and caches them in ignored `.
 The official `n8n-workflow` package also exposes a `Workflow` representation. Its constructor requires a node-type resolver and can silently skip unknown types. Constructing it with stub descriptors would therefore **not** establish that a file imports successfully in n8n Cloud. Even the real-descriptor parameter checks above cannot verify credential access, expression item-linking during execution, node lifecycle behavior, or browser redirects.
 
 No full n8n runtime or extra project service is required by this repository. Its offline checks establish JSON structure and deterministic control-flow behavior. The credential binding, Cloud import, Gemini model availability, and browser approval/revision checks remain the explicit manual acceptance steps in [testing.md](testing.md).
-

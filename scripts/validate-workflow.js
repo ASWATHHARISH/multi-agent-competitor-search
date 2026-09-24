@@ -72,4 +72,3 @@
  }
  if(require.main===module){const result=validate(JSON.parse(fs.readFileSync(path.join(root,'workflow/competitor-research-agent.json'),'utf8')));console.log(JSON.stringify(result,null,2));process.exitCode=result.errors.length?1:0;}
  module.exports={validate};
- 
