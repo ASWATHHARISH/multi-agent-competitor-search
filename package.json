@@ -1,0 +1,12 @@
+{
+  "name": "multi-agent-competitor-search",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Importable n8n competitor research workflow and offline validation",
+  "scripts": {
+    "build": "node scripts/build-workflow.js",
+    "validate": "node scripts/validate-workflow.js",
+    "test": "node --test tests"
+  },
+  "engines": { "node": ">=18" }
+}
